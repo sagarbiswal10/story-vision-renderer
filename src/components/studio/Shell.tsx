@@ -10,13 +10,13 @@ import {
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-const nav = [
+const nav: Array<{ to: string; label: string; icon: typeof Film; exact?: boolean }> = [
   { to: "/", label: "Studio", icon: Sparkles, exact: true },
   { to: "/projects", label: "Projects", icon: FolderOpen },
   { to: "/templates", label: "Templates", icon: LayoutGrid },
   { to: "/queue", label: "Render Queue", icon: ListVideo },
   { to: "/settings", label: "Settings", icon: Settings },
-] as const;
+];
 
 export function Shell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
