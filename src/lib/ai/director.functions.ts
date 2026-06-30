@@ -71,7 +71,7 @@ export const tagImages = createServerFn({ method: "POST" })
             },
             ...data.images.flatMap((img) => [
               { type: "text" as const, text: `id: ${img.id}` },
-              { type: "image_url" as const, image_url: { url: img.src } },
+              { type: "image" as const, image: img.src },
             ]),
           ],
         },
