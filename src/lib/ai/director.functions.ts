@@ -56,12 +56,9 @@ export const tagImages = createServerFn({ method: "POST" })
     const { output } = await generateText({
       model: gateway("google/gemini-3-flash-preview"),
       output: Output.object({ schema: TagSchema }),
+      system:
+        "You are a film editor's assistant. For each image, return cinematic metadata: heroScore (0..1, how strong/iconic the frame is), orientation, 3-6 lowercase tags, dominant emotion, and a one-sentence caption written like a film editor's note.",
       messages: [
-        {
-          role: "system",
-          content:
-            "You are a film editor's assistant. For each image, return cinematic metadata: heroScore (0..1, how strong/iconic the frame is), orientation, 3-6 lowercase tags, dominant emotion, and a one-sentence caption written like a film editor's note.",
-        },
         {
           role: "user",
           content: [
