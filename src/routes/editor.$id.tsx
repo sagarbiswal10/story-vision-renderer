@@ -51,8 +51,11 @@ function EditorPage() {
 
   const tagImagesFn = useServerFn(tagImages);
   const directStoryFn = useServerFn(directStory);
+  const editStoryFn = useServerFn(editStoryWithPrompt);
 
   const [aiBusy, setAiBusy] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editPrompt, setEditPrompt] = useState("");
   const [exporting, setExporting] = useState(false);
   const [rightTab, setRightTab] = useState<"generate" | "media" | "styles">("generate");
   const exportCanvasRef = useRef<HTMLCanvasElement>(null);
