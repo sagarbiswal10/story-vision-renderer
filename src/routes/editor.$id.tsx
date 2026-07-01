@@ -112,12 +112,22 @@ function EditorPage() {
       });
       setMeta(project.id, meta);
 
+      // Auto-detect the best template from vision tags
+      const detected = detectTemplate(meta, project.templateId);
+      let activeTemplate = template;
+      if (detected.score >= 1 && detected.id !== project.templateId) {
+        const chosen = getTemplate(detected.id);
+        activeTemplate = chosen;
+        updateProject(project.id, { templateId: chosen.id });
+        toast.success(`Detected ${detected.matched.slice(0, 3).join(", ")} → ${chosen.name} template`);
+      }
+
       toast("Writing the edit…");
       const story = await directStoryFn({
         data: {
           prompt: project.prompt,
-          mood: template.mood,
-          baseShotDuration: template.baseShotDuration,
+          mood: activeTemplate.mood,
+          baseShotDuration: activeTemplate.baseShotDuration,
           meta: project.assets.map((a) => {
             const m = meta[a.id];
             return {
@@ -130,7 +140,7 @@ function EditorPage() {
         },
       });
       setStory(project.id, story);
-      const updated = { ...project, meta, story };
+      const updated = { ...project, meta, story, templateId: activeTemplate.id };
       setTimeline(project.id, buildTimeline(updated));
       toast.success("Director cut ready.");
     } catch (e) {
@@ -144,6 +154,45 @@ function EditorPage() {
       setAiBusy(false);
     }
   };
+
+  const applyPromptEdit = async () => {
+    if (!editPrompt.trim()) return;
+    if (!project.story) {
+      toast.error("Run the AI Director first to create a cut you can edit.");
+      return;
+    }
+    setEditBusy(true);
+    try {
+      toast("Rewriting the edit…");
+      const next = await editStoryFn({
+        data: {
+          instruction: editPrompt,
+          current: {
+            title: project.story.title,
+            mood: project.story.mood,
+            beats: project.story.beats.map((b) => ({
+              act: b.act,
+              imageId: b.imageId,
+              duration: b.duration,
+              caption: b.caption ?? "",
+            })),
+          },
+          availableImageIds: project.assets.map((a) => a.id),
+        },
+      });
+      if (!next.beats.length) throw new Error("Edit produced an empty timeline.");
+      setStory(project.id, next);
+      setTimeline(project.id, buildTimeline({ ...project, story: next }));
+      setEditPrompt("");
+      toast.success("Edit applied.");
+    } catch (e) {
+      console.error(e);
+      toast.error(e instanceof Error ? e.message : "Prompt edit failed.");
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
 
   const onExport = async () => {
     if (!timeline) return;
