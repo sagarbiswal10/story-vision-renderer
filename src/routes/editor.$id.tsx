@@ -2,14 +2,14 @@ import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { TEMPLATES, getTemplate } from "@/lib/engines/templates";
-import { buildStoryArc, buildTimeline } from "@/lib/engines/director";
+import { buildStoryArc, buildTimeline, detectTemplate } from "@/lib/engines/director";
 import { analyzeAudio } from "@/lib/engines/beat";
 import { exportVideo } from "@/lib/engines/export";
 import { createRenderer } from "@/lib/engines/renderer";
 import { fileToImageAsset } from "@/lib/upload";
 import { Preview } from "@/components/studio/Preview";
 import { UploadZone } from "@/components/studio/UploadZone";
-import { tagImages, directStory } from "@/lib/ai/director.functions";
+import { tagImages, directStory, editStoryWithPrompt } from "@/lib/ai/director.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
