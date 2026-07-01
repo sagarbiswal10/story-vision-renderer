@@ -20,11 +20,9 @@ import {
   Wand2,
   X,
   ImagePlus,
-  Video as VideoIcon,
   Type,
   Layers,
   Sliders,
-  ChevronDown,
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
