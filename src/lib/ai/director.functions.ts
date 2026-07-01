@@ -126,22 +126,14 @@ export const directStory = createServerFn({ method: "POST" })
     const { output } = await generateText({
       model: gateway("google/gemini-3-flash-preview"),
       output: Output.object({ schema: StorySchema }),
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a senior film editor. Given image notes, write a 5-act cinematic edit (opening → buildup → highlight → peak → ending). Order every image exactly once. Pick durations that feel like a real edit; respect the requested mood. Return JSON only.",
-        },
-        {
-          role: "user",
-          content: `Mood: ${data.mood}\nUser prompt: ${data.prompt}\nBase shot duration: ${data.baseShotDuration}s\nImages:\n${data.meta
-            .map(
-              (m) =>
-                `- ${m.id} | hero=${m.heroScore.toFixed(2)} | emotion=${m.emotion ?? "?"} | ${m.caption ?? ""}`,
-            )
-            .join("\n")}`,
-        },
-      ],
+      system:
+        "You are a senior film editor. Given image notes, write a 5-act cinematic edit (opening → buildup → highlight → peak → ending). Order every image exactly once. Pick durations that feel like a real edit; respect the requested mood. Return JSON only.",
+      prompt: `Mood: ${data.mood}\nUser prompt: ${data.prompt}\nBase shot duration: ${data.baseShotDuration}s\nImages:\n${data.meta
+        .map(
+          (m) =>
+            `- ${m.id} | hero=${m.heroScore.toFixed(2)} | emotion=${m.emotion ?? "?"} | ${m.caption ?? ""}`,
+        )
+        .join("\n")}`,
     });
 
     return output;
