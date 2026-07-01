@@ -56,12 +56,9 @@ export const tagImages = createServerFn({ method: "POST" })
     const { output } = await generateText({
       model: gateway("google/gemini-3-flash-preview"),
       output: Output.object({ schema: TagSchema }),
+      system:
+        "You are a film editor's assistant. For each image, return cinematic metadata: heroScore (0..1, how strong/iconic the frame is), orientation, 3-6 lowercase tags, dominant emotion, and a one-sentence caption written like a film editor's note.",
       messages: [
-        {
-          role: "system",
-          content:
-            "You are a film editor's assistant. For each image, return cinematic metadata: heroScore (0..1, how strong/iconic the frame is), orientation, 3-6 lowercase tags, dominant emotion, and a one-sentence caption written like a film editor's note.",
-        },
         {
           role: "user",
           content: [
@@ -129,22 +126,14 @@ export const directStory = createServerFn({ method: "POST" })
     const { output } = await generateText({
       model: gateway("google/gemini-3-flash-preview"),
       output: Output.object({ schema: StorySchema }),
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a senior film editor. Given image notes, write a 5-act cinematic edit (opening → buildup → highlight → peak → ending). Order every image exactly once. Pick durations that feel like a real edit; respect the requested mood. Return JSON only.",
-        },
-        {
-          role: "user",
-          content: `Mood: ${data.mood}\nUser prompt: ${data.prompt}\nBase shot duration: ${data.baseShotDuration}s\nImages:\n${data.meta
-            .map(
-              (m) =>
-                `- ${m.id} | hero=${m.heroScore.toFixed(2)} | emotion=${m.emotion ?? "?"} | ${m.caption ?? ""}`,
-            )
-            .join("\n")}`,
-        },
-      ],
+      system:
+        "You are a senior film editor. Given image notes, write a 5-act cinematic edit (opening → buildup → highlight → peak → ending). Order every image exactly once. Pick durations that feel like a real edit; respect the requested mood. Return JSON only.",
+      prompt: `Mood: ${data.mood}\nUser prompt: ${data.prompt}\nBase shot duration: ${data.baseShotDuration}s\nImages:\n${data.meta
+        .map(
+          (m) =>
+            `- ${m.id} | hero=${m.heroScore.toFixed(2)} | emotion=${m.emotion ?? "?"} | ${m.caption ?? ""}`,
+        )
+        .join("\n")}`,
     });
 
     return output;

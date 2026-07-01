@@ -103,7 +103,20 @@ export const useStudio = create<StudioState>()(
           ? { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
           : window.localStorage,
       ),
-      partialize: (s) => ({ projects: s.projects, currentId: s.currentId }),
+      partialize: (s) => ({
+        // Strip heavy fields (image dataURLs, blob URLs, timelines) so we don't
+        // blow past the ~5MB localStorage quota. Assets are re-added per session.
+        projects: s.projects.map((p) => ({
+          ...p,
+          assets: [],
+          meta: {},
+          music: undefined,
+          story: undefined,
+          timeline: undefined,
+          render: { status: "idle" as const, progress: 0 },
+        })),
+        currentId: s.currentId,
+      }),
     },
   ),
 );
