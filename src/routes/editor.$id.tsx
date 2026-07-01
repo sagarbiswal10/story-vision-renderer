@@ -495,39 +495,20 @@ function EditorPage() {
           <div className="min-h-0 flex-1 overflow-auto px-5 py-5">
             {rightTab === "generate" && (
               <>
-                <div className="mb-4 flex items-center gap-2 rounded-full border border-border bg-background/40 p-1 text-xs">
-                  <button className="flex-1 rounded-full py-1.5 text-muted-foreground">
-                    <ImagePlus className="mx-auto h-3.5 w-3.5" />
-                  </button>
-                  <button className="flex-1 rounded-full bg-accent py-1.5 text-accent-foreground">
-                    <VideoIcon className="mx-auto h-3.5 w-3.5" />
-                  </button>
-                </div>
-
                 <label className="mb-2 block text-[11px] uppercase tracking-widest text-muted-foreground">
-                  Director model
-                </label>
-                <button className="mb-4 flex w-full items-center justify-between rounded-lg border border-border bg-background/40 px-3 py-2 text-sm">
-                  <span className="flex items-center gap-2">
-                    <Sparkles className="h-3.5 w-3.5 text-accent" /> Gemini Vision · 3 Flash
-                  </span>
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-
-                <label className="mb-2 block text-[11px] uppercase tracking-widest text-muted-foreground">
-                  Direction prompt
+                  Direction brief
                 </label>
                 <textarea
                   value={project.prompt}
                   onChange={(e) => updateProject(project.id, { prompt: e.target.value })}
-                  placeholder="A cyclist gliding through a vibrant neon-lit cityscape at night, low-angle shot…"
-                  className="mb-3 h-32 w-full resize-none rounded-lg border border-border bg-background/40 p-3 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60"
+                  placeholder="e.g. My daughter's 5th birthday — warm, joyful, cake reveal is the peak."
+                  className="mb-3 h-28 w-full resize-none rounded-lg border border-border bg-background/40 p-3 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60"
                 />
 
                 <div className="mb-4 grid grid-cols-3 gap-2 text-[11px]">
                   <Chip icon={<Type className="h-3 w-3" />} label="16:9" />
-                  <Chip label="5s / shot" />
-                  <Chip label="Cinematic" />
+                  <Chip label={`${template.baseShotDuration}s / shot`} />
+                  <Chip label={template.name} />
                 </div>
 
                 <button
@@ -538,6 +519,38 @@ function EditorPage() {
                   <Sparkles className="h-3.5 w-3.5" />
                   {aiBusy ? "Directing…" : "Direct film"}
                 </button>
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  Auto-detects the theme (birthday, wedding, travel…) and picks the best template.
+                </p>
+
+                {/* Prompt-based edit */}
+                <div className="mt-8 rounded-lg border border-border bg-background/40 p-3">
+                  <div className="mb-2 flex items-center gap-1.5">
+                    <Wand2 className="h-3.5 w-3.5 text-accent" />
+                    <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                      Edit with a prompt
+                    </p>
+                  </div>
+                  <textarea
+                    value={editPrompt}
+                    onChange={(e) => setEditPrompt(e.target.value)}
+                    disabled={!project.story}
+                    placeholder={
+                      project.story
+                        ? "e.g. Make it faster, open with the cake shot, end on the group photo."
+                        : "Run the Director first to unlock prompt editing."
+                    }
+                    className="h-24 w-full resize-none rounded-md border border-border bg-background/40 p-2 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60 disabled:opacity-50"
+                  />
+                  <button
+                    onClick={applyPromptEdit}
+                    disabled={editBusy || !editPrompt.trim() || !project.story}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-accent/60 px-3 py-2 text-xs text-accent hover:bg-accent/10 disabled:opacity-50"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    {editBusy ? "Rewriting…" : "Apply edit"}
+                  </button>
+                </div>
 
                 {project.story?.beats?.[0] && (
                   <div className="mt-6 rounded-lg border border-border bg-background/40 p-3">
@@ -551,6 +564,7 @@ function EditorPage() {
                 )}
               </>
             )}
+
 
             {rightTab === "media" && (
               <>
