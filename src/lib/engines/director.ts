@@ -22,9 +22,39 @@ import type {
   TransitionKind,
 } from "./types";
 import { cameraToMotion } from "./motion";
-import { getTemplate } from "./templates";
+import { getTemplate, TEMPLATES } from "./templates";
 
 const ASPECT = { width: 1920, height: 1080, fps: 30 };
+
+/**
+ * Auto-detect the best template for a batch of tagged images.
+ *
+ * Scores each template by how many of its `themeKeywords` appear in the
+ * combined tag / caption bag of words from Vision Engine metadata. Falls
+ * back to the current template id when nothing scores above zero.
+ */
+export function detectTemplate(
+  meta: Record<string, ImageMeta>,
+  fallbackId: string,
+): { id: string; score: number; matched: string[] } {
+  const bag = Object.values(meta)
+    .flatMap((m) => [...(m.tags ?? []), (m.caption ?? "").toLowerCase()])
+    .join(" ")
+    .toLowerCase();
+  if (!bag.trim()) return { id: fallbackId, score: 0, matched: [] };
+
+  let best = { id: fallbackId, score: 0, matched: [] as string[] };
+  for (const t of TEMPLATES) {
+    const kws = t.themeKeywords ?? [];
+    const matched = kws.filter((k) => bag.includes(k.toLowerCase()));
+    // weight by ratio of matched keywords so short-list templates still win
+    const score = matched.length + matched.length / Math.max(1, kws.length);
+    if (score > best.score) best = { id: t.id, score, matched };
+  }
+  return best;
+}
+
+
 
 export function buildStoryArc(
   assets: ImageAsset[],

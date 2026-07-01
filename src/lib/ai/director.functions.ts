@@ -138,3 +138,51 @@ export const directStory = createServerFn({ method: "POST" })
 
     return output;
   });
+
+/* ============================================================================
+ * editStoryWithPrompt — natural-language editing of an existing StoryArc.
+ *
+ * The user types an instruction like "make it faster and open with the beach
+ * shot" and gets back a modified StoryArc. Uses only existing image ids.
+ * ============================================================================ */
+
+const EditInput = z.object({
+  instruction: z.string().min(2),
+  current: z.object({
+    title: z.string(),
+    mood: z.string(),
+    beats: z.array(
+      z.object({
+        act: z.enum(["opening", "buildup", "highlight", "peak", "ending"]),
+        imageId: z.string(),
+        duration: z.number(),
+        caption: z.string().nullable().optional(),
+      }),
+    ),
+  }),
+  availableImageIds: z.array(z.string()).min(1),
+});
+
+export const editStoryWithPrompt = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => EditInput.parse(data))
+  .handler(async ({ data }): Promise<StoryArc> => {
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) throw new Error("Missing LOVABLE_API_KEY");
+    const gateway = createLovableAiGatewayProvider(key);
+
+    const { output } = await generateText({
+      model: gateway("google/gemini-3-flash-preview"),
+      output: Output.object({ schema: StorySchema }),
+      system:
+        "You are a senior film editor revising an existing cut. Apply the user's instruction to the given StoryArc: you may reorder shots, change durations (0.6–12s), rewrite captions, and change the title/mood. Every beat's imageId MUST be one of the availableImageIds. Return JSON only.",
+      prompt: `Instruction: ${data.instruction}\nAvailable image ids: ${data.availableImageIds.join(
+        ", ",
+      )}\nCurrent cut:\n${JSON.stringify(data.current, null, 2)}`,
+    });
+
+    // Guard against hallucinated ids
+    const allowed = new Set(data.availableImageIds);
+    output.beats = output.beats.filter((b) => allowed.has(b.imageId));
+    return output;
+  });
+

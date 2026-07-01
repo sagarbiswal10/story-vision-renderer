@@ -2,14 +2,14 @@ import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { TEMPLATES, getTemplate } from "@/lib/engines/templates";
-import { buildStoryArc, buildTimeline } from "@/lib/engines/director";
+import { buildStoryArc, buildTimeline, detectTemplate } from "@/lib/engines/director";
 import { analyzeAudio } from "@/lib/engines/beat";
 import { exportVideo } from "@/lib/engines/export";
 import { createRenderer } from "@/lib/engines/renderer";
 import { fileToImageAsset } from "@/lib/upload";
 import { Preview } from "@/components/studio/Preview";
 import { UploadZone } from "@/components/studio/UploadZone";
-import { tagImages, directStory } from "@/lib/ai/director.functions";
+import { tagImages, directStory, editStoryWithPrompt } from "@/lib/ai/director.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
@@ -20,11 +20,9 @@ import {
   Wand2,
   X,
   ImagePlus,
-  Video as VideoIcon,
   Type,
   Layers,
   Sliders,
-  ChevronDown,
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -53,8 +51,11 @@ function EditorPage() {
 
   const tagImagesFn = useServerFn(tagImages);
   const directStoryFn = useServerFn(directStory);
+  const editStoryFn = useServerFn(editStoryWithPrompt);
 
   const [aiBusy, setAiBusy] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editPrompt, setEditPrompt] = useState("");
   const [exporting, setExporting] = useState(false);
   const [rightTab, setRightTab] = useState<"generate" | "media" | "styles">("generate");
   const exportCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -111,12 +112,22 @@ function EditorPage() {
       });
       setMeta(project.id, meta);
 
+      // Auto-detect the best template from vision tags
+      const detected = detectTemplate(meta, project.templateId);
+      let activeTemplate = template;
+      if (detected.score >= 1 && detected.id !== project.templateId) {
+        const chosen = getTemplate(detected.id);
+        activeTemplate = chosen;
+        updateProject(project.id, { templateId: chosen.id });
+        toast.success(`Detected ${detected.matched.slice(0, 3).join(", ")} → ${chosen.name} template`);
+      }
+
       toast("Writing the edit…");
       const story = await directStoryFn({
         data: {
           prompt: project.prompt,
-          mood: template.mood,
-          baseShotDuration: template.baseShotDuration,
+          mood: activeTemplate.mood,
+          baseShotDuration: activeTemplate.baseShotDuration,
           meta: project.assets.map((a) => {
             const m = meta[a.id];
             return {
@@ -129,7 +140,7 @@ function EditorPage() {
         },
       });
       setStory(project.id, story);
-      const updated = { ...project, meta, story };
+      const updated = { ...project, meta, story, templateId: activeTemplate.id };
       setTimeline(project.id, buildTimeline(updated));
       toast.success("Director cut ready.");
     } catch (e) {
@@ -143,6 +154,45 @@ function EditorPage() {
       setAiBusy(false);
     }
   };
+
+  const applyPromptEdit = async () => {
+    if (!editPrompt.trim()) return;
+    if (!project.story) {
+      toast.error("Run the AI Director first to create a cut you can edit.");
+      return;
+    }
+    setEditBusy(true);
+    try {
+      toast("Rewriting the edit…");
+      const next = await editStoryFn({
+        data: {
+          instruction: editPrompt,
+          current: {
+            title: project.story.title,
+            mood: project.story.mood,
+            beats: project.story.beats.map((b) => ({
+              act: b.act,
+              imageId: b.imageId,
+              duration: b.duration,
+              caption: b.caption ?? "",
+            })),
+          },
+          availableImageIds: project.assets.map((a) => a.id),
+        },
+      });
+      if (!next.beats.length) throw new Error("Edit produced an empty timeline.");
+      setStory(project.id, next);
+      setTimeline(project.id, buildTimeline({ ...project, story: next }));
+      setEditPrompt("");
+      toast.success("Edit applied.");
+    } catch (e) {
+      console.error(e);
+      toast.error(e instanceof Error ? e.message : "Prompt edit failed.");
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
 
   const onExport = async () => {
     if (!timeline) return;
@@ -224,15 +274,25 @@ function EditorPage() {
         {/* LEFT — Script / Story panel */}
         <aside className="flex min-h-0 flex-col border-r border-border bg-sidebar/40">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">Script</p>
-            <button className="text-[11px] uppercase tracking-widest text-accent">Write</button>
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Storyboard</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground/70">
+                Shot-by-shot breakdown of the current cut
+              </p>
+            </div>
+            <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              {project.story?.beats.length ?? 0} shots
+            </span>
           </div>
           <div className="min-h-0 flex-1 overflow-auto px-5 py-6">
+            <label className="mb-2 block text-[10px] uppercase tracking-widest text-muted-foreground">
+              Brief
+            </label>
             <textarea
               value={project.prompt}
               onChange={(e) => updateProject(project.id, { prompt: e.target.value })}
-              placeholder="Describe your film. e.g. A weekend in Lisbon, golden hour, intimate."
-              className="mb-6 h-24 w-full resize-none rounded-lg border border-border bg-background/40 p-3 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60"
+              placeholder="Describe your film. e.g. A birthday party — warm, joyful, punchy."
+              className="mb-6 h-20 w-full resize-none rounded-lg border border-border bg-background/40 p-3 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60"
             />
 
             {project.story ? (
@@ -245,28 +305,36 @@ function EditorPage() {
                         <img
                           src={asset.src}
                           alt=""
-                          className="mt-1 h-8 w-8 shrink-0 rounded-md object-cover"
+                          className="mt-1 h-10 w-10 shrink-0 rounded-md object-cover"
                         />
                       ) : (
-                        <div className="mt-1 h-8 w-8 shrink-0 rounded-md bg-card" />
+                        <div className="mt-1 h-10 w-10 shrink-0 rounded-md bg-card" />
                       )}
-                      <p className="text-foreground/90">
-                        <span className="mr-2 font-mono text-[10px] uppercase tracking-widest text-accent">
-                          {b.act}
-                        </span>
-                        {b.caption ?? "Untitled shot."}
-                      </p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[10px] uppercase tracking-widest text-accent">
+                            {b.act}
+                          </span>
+                          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                            {b.duration.toFixed(1)}s
+                          </span>
+                        </div>
+                        <p className="text-sm text-foreground/90">
+                          {b.caption ?? "Untitled shot."}
+                        </p>
+                      </div>
                     </li>
                   );
                 })}
               </ol>
             ) : (
               <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
-                Run the AI Director to generate a script from your images.
+                Upload photos and Run AI Director — the storyboard will build itself.
               </div>
             )}
           </div>
         </aside>
+
 
         {/* CENTER — Preview + Timeline */}
         <section className="flex min-h-0 flex-col">
@@ -427,39 +495,20 @@ function EditorPage() {
           <div className="min-h-0 flex-1 overflow-auto px-5 py-5">
             {rightTab === "generate" && (
               <>
-                <div className="mb-4 flex items-center gap-2 rounded-full border border-border bg-background/40 p-1 text-xs">
-                  <button className="flex-1 rounded-full py-1.5 text-muted-foreground">
-                    <ImagePlus className="mx-auto h-3.5 w-3.5" />
-                  </button>
-                  <button className="flex-1 rounded-full bg-accent py-1.5 text-accent-foreground">
-                    <VideoIcon className="mx-auto h-3.5 w-3.5" />
-                  </button>
-                </div>
-
                 <label className="mb-2 block text-[11px] uppercase tracking-widest text-muted-foreground">
-                  Director model
-                </label>
-                <button className="mb-4 flex w-full items-center justify-between rounded-lg border border-border bg-background/40 px-3 py-2 text-sm">
-                  <span className="flex items-center gap-2">
-                    <Sparkles className="h-3.5 w-3.5 text-accent" /> Gemini Vision · 3 Flash
-                  </span>
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-
-                <label className="mb-2 block text-[11px] uppercase tracking-widest text-muted-foreground">
-                  Direction prompt
+                  Direction brief
                 </label>
                 <textarea
                   value={project.prompt}
                   onChange={(e) => updateProject(project.id, { prompt: e.target.value })}
-                  placeholder="A cyclist gliding through a vibrant neon-lit cityscape at night, low-angle shot…"
-                  className="mb-3 h-32 w-full resize-none rounded-lg border border-border bg-background/40 p-3 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60"
+                  placeholder="e.g. My daughter's 5th birthday — warm, joyful, cake reveal is the peak."
+                  className="mb-3 h-28 w-full resize-none rounded-lg border border-border bg-background/40 p-3 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60"
                 />
 
                 <div className="mb-4 grid grid-cols-3 gap-2 text-[11px]">
                   <Chip icon={<Type className="h-3 w-3" />} label="16:9" />
-                  <Chip label="5s / shot" />
-                  <Chip label="Cinematic" />
+                  <Chip label={`${template.baseShotDuration}s / shot`} />
+                  <Chip label={template.name} />
                 </div>
 
                 <button
@@ -470,6 +519,38 @@ function EditorPage() {
                   <Sparkles className="h-3.5 w-3.5" />
                   {aiBusy ? "Directing…" : "Direct film"}
                 </button>
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  Auto-detects the theme (birthday, wedding, travel…) and picks the best template.
+                </p>
+
+                {/* Prompt-based edit */}
+                <div className="mt-8 rounded-lg border border-border bg-background/40 p-3">
+                  <div className="mb-2 flex items-center gap-1.5">
+                    <Wand2 className="h-3.5 w-3.5 text-accent" />
+                    <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                      Edit with a prompt
+                    </p>
+                  </div>
+                  <textarea
+                    value={editPrompt}
+                    onChange={(e) => setEditPrompt(e.target.value)}
+                    disabled={!project.story}
+                    placeholder={
+                      project.story
+                        ? "e.g. Make it faster, open with the cake shot, end on the group photo."
+                        : "Run the Director first to unlock prompt editing."
+                    }
+                    className="h-24 w-full resize-none rounded-md border border-border bg-background/40 p-2 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60 disabled:opacity-50"
+                  />
+                  <button
+                    onClick={applyPromptEdit}
+                    disabled={editBusy || !editPrompt.trim() || !project.story}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-accent/60 px-3 py-2 text-xs text-accent hover:bg-accent/10 disabled:opacity-50"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    {editBusy ? "Rewriting…" : "Apply edit"}
+                  </button>
+                </div>
 
                 {project.story?.beats?.[0] && (
                   <div className="mt-6 rounded-lg border border-border bg-background/40 p-3">
@@ -483,6 +564,7 @@ function EditorPage() {
                 )}
               </>
             )}
+
 
             {rightTab === "media" && (
               <>
