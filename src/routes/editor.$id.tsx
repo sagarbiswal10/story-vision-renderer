@@ -274,15 +274,25 @@ function EditorPage() {
         {/* LEFT — Script / Story panel */}
         <aside className="flex min-h-0 flex-col border-r border-border bg-sidebar/40">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">Script</p>
-            <button className="text-[11px] uppercase tracking-widest text-accent">Write</button>
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Storyboard</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground/70">
+                Shot-by-shot breakdown of the current cut
+              </p>
+            </div>
+            <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              {project.story?.beats.length ?? 0} shots
+            </span>
           </div>
           <div className="min-h-0 flex-1 overflow-auto px-5 py-6">
+            <label className="mb-2 block text-[10px] uppercase tracking-widest text-muted-foreground">
+              Brief
+            </label>
             <textarea
               value={project.prompt}
               onChange={(e) => updateProject(project.id, { prompt: e.target.value })}
-              placeholder="Describe your film. e.g. A weekend in Lisbon, golden hour, intimate."
-              className="mb-6 h-24 w-full resize-none rounded-lg border border-border bg-background/40 p-3 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60"
+              placeholder="Describe your film. e.g. A birthday party — warm, joyful, punchy."
+              className="mb-6 h-20 w-full resize-none rounded-lg border border-border bg-background/40 p-3 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60"
             />
 
             {project.story ? (
@@ -295,28 +305,36 @@ function EditorPage() {
                         <img
                           src={asset.src}
                           alt=""
-                          className="mt-1 h-8 w-8 shrink-0 rounded-md object-cover"
+                          className="mt-1 h-10 w-10 shrink-0 rounded-md object-cover"
                         />
                       ) : (
-                        <div className="mt-1 h-8 w-8 shrink-0 rounded-md bg-card" />
+                        <div className="mt-1 h-10 w-10 shrink-0 rounded-md bg-card" />
                       )}
-                      <p className="text-foreground/90">
-                        <span className="mr-2 font-mono text-[10px] uppercase tracking-widest text-accent">
-                          {b.act}
-                        </span>
-                        {b.caption ?? "Untitled shot."}
-                      </p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[10px] uppercase tracking-widest text-accent">
+                            {b.act}
+                          </span>
+                          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                            {b.duration.toFixed(1)}s
+                          </span>
+                        </div>
+                        <p className="text-sm text-foreground/90">
+                          {b.caption ?? "Untitled shot."}
+                        </p>
+                      </div>
                     </li>
                   );
                 })}
               </ol>
             ) : (
               <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
-                Run the AI Director to generate a script from your images.
+                Upload photos and Run AI Director — the storyboard will build itself.
               </div>
             )}
           </div>
         </aside>
+
 
         {/* CENTER — Preview + Timeline */}
         <section className="flex min-h-0 flex-col">
