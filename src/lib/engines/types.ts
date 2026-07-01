@@ -127,6 +127,8 @@ export interface Template {
   cameraVocabulary: CameraMove[];
   transitions: TransitionKind[];
   motionIntensity: number; // 0..1
+  /** Keywords used by the auto-detector to match a set of images to a template. */
+  themeKeywords?: string[];
   typography: {
     titleFont: string;
     bodyFont: string;
