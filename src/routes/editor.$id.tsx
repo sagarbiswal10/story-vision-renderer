@@ -2,19 +2,23 @@ import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { TEMPLATES, getTemplate } from "@/lib/engines/templates";
-import { buildStoryArc, buildTimeline, detectTemplate } from "@/lib/engines/director";
+import { buildStoryArc, buildStoryFromMusic, buildTimeline, detectTemplate } from "@/lib/engines/director";
 import { analyzeAudio } from "@/lib/engines/beat";
 import { exportVideo } from "@/lib/engines/export";
 import { createRenderer } from "@/lib/engines/renderer";
+import { cameraToMotion } from "@/lib/engines/motion";
 import { fileToImageAsset } from "@/lib/upload";
 import { Preview } from "@/components/studio/Preview";
 import { UploadZone } from "@/components/studio/UploadZone";
 import { tagImages, directStory, editStoryWithPrompt } from "@/lib/ai/director.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
+import type { CameraMove, Shot, Timeline, TransitionKind } from "@/lib/engines/types";
 import {
   ArrowLeft,
   Download,
+  Maximize2,
+  Minimize2,
   Music,
   Sparkles,
   Wand2,
@@ -24,8 +28,17 @@ import {
   Layers,
   Sliders,
   Trash2,
+  Scissors,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const CAMERA_MOVES: CameraMove[] = [
+  "static", "push-in", "pull-out", "orbit-left", "orbit-right",
+  "tilt-up", "tilt-down", "truck-left", "truck-right", "ken-burns",
+];
+const TRANSITIONS: TransitionKind[] = [
+  "cut", "fade", "dip-to-black", "whip-pan", "cross-dissolve", "wipe-up", "wipe-right",
+];
 
 export const Route = createFileRoute("/editor/$id")({
   head: ({ params }) => ({
@@ -57,7 +70,9 @@ function EditorPage() {
   const [editBusy, setEditBusy] = useState(false);
   const [editPrompt, setEditPrompt] = useState("");
   const [exporting, setExporting] = useState(false);
-  const [rightTab, setRightTab] = useState<"generate" | "media" | "styles">("generate");
+  const [rightTab, setRightTab] = useState<"generate" | "media" | "styles" | "shot">("generate");
+  const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const exportCanvasRef = useRef<HTMLCanvasElement>(null);
 
   if (!project) throw notFound();
@@ -92,11 +107,51 @@ function EditorPage() {
       const beatMap = await analyzeAudio(src);
       setMusic(project.id, { src, name: file.name, beatMap });
       toast.success(`Detected ${beatMap.bpm} BPM · ${beatMap.beats.length} beats`);
-      const updated = { ...project, music: { src, name: file.name, beatMap } };
+      // Auto-rebuild cut: pick best clips to fit music, snap cuts to beats.
+      const story = buildStoryFromMusic(
+        project.assets, project.meta, template, project.prompt, beatMap.duration,
+      );
+      const updated = { ...project, music: { src, name: file.name, beatMap }, story };
+      setStory(project.id, story);
       setTimeline(project.id, buildTimeline(updated));
+      toast.success("Re-cut to the beat.");
     } catch {
       toast.error("Couldn't analyze that track.");
     }
+  };
+
+  const updateShot = (shotId: string, patch: Partial<Shot>) => {
+    if (!timeline) return;
+    const shots = timeline.shots.map((s) => {
+      if (s.id !== shotId) return s;
+      const next: Shot = { ...s, ...patch };
+      if (patch.camera && !patch.motion) {
+        next.motion = cameraToMotion(patch.camera, template.motionIntensity, 0);
+      }
+      return next;
+    });
+    // Recompute start times if durations changed
+    let cursor = 0;
+    const restarted = shots.map((s) => {
+      const ns = { ...s, start: cursor };
+      cursor += s.duration;
+      return ns;
+    });
+    const next: Timeline = { ...timeline, shots: restarted, duration: cursor };
+    setTimeline(project.id, next);
+  };
+
+  const removeShot = (shotId: string) => {
+    if (!timeline) return;
+    const shots = timeline.shots.filter((s) => s.id !== shotId);
+    let cursor = 0;
+    const restarted = shots.map((s) => {
+      const ns = { ...s, start: cursor };
+      cursor += s.duration;
+      return ns;
+    });
+    setTimeline(project.id, { ...timeline, shots: restarted, duration: cursor });
+    setSelectedShotId(null);
   };
 
   const runAiDirector = async () => {
@@ -118,7 +173,10 @@ function EditorPage() {
       if (detected.score >= 1 && detected.id !== project.templateId) {
         const chosen = getTemplate(detected.id);
         activeTemplate = chosen;
-        updateProject(project.id, { templateId: chosen.id });
+        const patch: Partial<typeof project> = { templateId: chosen.id };
+        // Auto-rename generic project names to match detected theme.
+        if (/^Untitled/i.test(project.name)) patch.name = `${chosen.name} Film`;
+        updateProject(project.id, patch);
         toast.success(`Detected ${detected.matched.slice(0, 3).join(", ")} → ${chosen.name} template`);
       }
 
@@ -285,44 +343,36 @@ function EditorPage() {
             </span>
           </div>
           <div className="min-h-0 flex-1 overflow-auto px-5 py-6">
-            <label className="mb-2 block text-[10px] uppercase tracking-widest text-muted-foreground">
-              Brief
-            </label>
-            <textarea
-              value={project.prompt}
-              onChange={(e) => updateProject(project.id, { prompt: e.target.value })}
-              placeholder="Describe your film. e.g. A birthday party — warm, joyful, punchy."
-              className="mb-6 h-20 w-full resize-none rounded-lg border border-border bg-background/40 p-3 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60"
-            />
+
 
             {project.story ? (
-              <ol className="space-y-4 text-[15px] leading-relaxed">
+              <ol className="space-y-2 text-[15px] leading-relaxed">
                 {project.story.beats.map((b, i) => {
                   const asset = project.assets.find((a) => a.id === b.imageId);
+                  const shotId = `shot-${i}`;
+                  const active = selectedShotId === shotId;
                   return (
-                    <li key={i} className="flex gap-3">
-                      {asset ? (
-                        <img
-                          src={asset.src}
-                          alt=""
-                          className="mt-1 h-10 w-10 shrink-0 rounded-md object-cover"
-                        />
-                      ) : (
-                        <div className="mt-1 h-10 w-10 shrink-0 rounded-md bg-card" />
-                      )}
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-[10px] uppercase tracking-widest text-accent">
-                            {b.act}
-                          </span>
-                          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                            {b.duration.toFixed(1)}s
-                          </span>
+                    <li key={i}>
+                      <button
+                        onClick={() => { setSelectedShotId(shotId); setRightTab("shot"); }}
+                        className={cn(
+                          "flex w-full gap-3 rounded-md border p-2 text-left transition-colors",
+                          active ? "border-accent bg-accent/10" : "border-transparent hover:border-border hover:bg-card/40",
+                        )}
+                      >
+                        {asset ? (
+                          <img src={asset.src} alt="" className="mt-1 h-10 w-10 shrink-0 rounded-md object-cover" />
+                        ) : (
+                          <div className="mt-1 h-10 w-10 shrink-0 rounded-md bg-card" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[10px] uppercase tracking-widest text-accent">{b.act}</span>
+                            <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{b.duration.toFixed(1)}s</span>
+                          </div>
+                          <p className="text-sm text-foreground/90">{b.caption ?? "Untitled shot."}</p>
                         </div>
-                        <p className="text-sm text-foreground/90">
-                          {b.caption ?? "Untitled shot."}
-                        </p>
-                      </div>
+                      </button>
                     </li>
                   );
                 })}
@@ -336,17 +386,31 @@ function EditorPage() {
         </aside>
 
 
+
         {/* CENTER — Preview + Timeline */}
         <section className="flex min-h-0 flex-col">
-          <div className="flex min-h-0 flex-1 items-center justify-center bg-black/60 p-6">
+          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/60 p-6">
             {timeline ? (
-              <div className="max-h-full w-full max-w-4xl">
-                <Preview
-                  timeline={timeline}
-                  assets={project.assets}
-                  audioUrl={project.music?.src}
-                />
-              </div>
+              <>
+                <div className={cn(
+                  fullscreen
+                    ? "fixed inset-0 z-50 flex items-center justify-center bg-black p-6"
+                    : "max-h-full w-full max-w-4xl",
+                )}>
+                  <Preview
+                    timeline={timeline}
+                    assets={project.assets}
+                    audioUrl={project.music?.src}
+                  />
+                  <button
+                    onClick={() => setFullscreen((v) => !v)}
+                    className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-md bg-background/70 text-muted-foreground backdrop-blur hover:text-accent"
+                    title={fullscreen ? "Exit fullscreen" : "Fullscreen preview"}
+                  >
+                    {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  </button>
+                </div>
+              </>
             ) : (
               <div className="w-full max-w-lg">
                 <UploadZone
@@ -359,6 +423,7 @@ function EditorPage() {
               </div>
             )}
           </div>
+
 
           {/* Timeline bar */}
           <div className="h-48 shrink-0 border-t border-border bg-sidebar/60">
@@ -412,24 +477,26 @@ function EditorPage() {
                 const asset = project.assets.find((a) => a.id === s.imageId);
                 const total = Math.max(timeline.duration, 0.001);
                 return (
-                  <div
+                  <button
                     key={s.id}
+                    type="button"
+                    onClick={() => { setSelectedShotId(s.id); setRightTab("shot"); }}
                     style={{ width: `${(s.duration / total) * 100}%` }}
-                    className="relative m-0.5 overflow-hidden rounded-sm border border-border/60 bg-card"
+                    className={cn(
+                      "relative m-0.5 overflow-hidden rounded-sm border bg-card text-left transition-colors",
+                      selectedShotId === s.id ? "border-accent ring-1 ring-accent" : "border-border/60 hover:border-accent/60",
+                    )}
                   >
                     {asset && (
-                      <img
-                        src={asset.src}
-                        alt=""
-                        className="h-full w-full object-cover opacity-90"
-                      />
+                      <img src={asset.src} alt="" className="h-full w-full object-cover opacity-90" />
                     )}
                     <span className="absolute bottom-0.5 left-1 rounded bg-black/70 px-1 text-[9px] uppercase tracking-widest text-accent">
                       {s.camera}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
+
             </div>
 
             {/* Audio row */}
@@ -472,7 +539,8 @@ function EditorPage() {
           <div className="flex border-b border-border">
             {(
               [
-                { k: "generate", label: "Generate", icon: Wand2 },
+                { k: "shot", label: "Shot", icon: Scissors },
+                { k: "generate", label: "Direct", icon: Wand2 },
                 { k: "media", label: "Media", icon: Layers },
                 { k: "styles", label: "Style", icon: Sliders },
               ] as const
@@ -493,6 +561,94 @@ function EditorPage() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto px-5 py-5">
+            {rightTab === "shot" && (() => {
+              const shot = timeline?.shots.find((s) => s.id === selectedShotId);
+              if (!shot) {
+                return (
+                  <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                    Click a clip in the timeline or a beat in the storyboard to edit its camera move, transition, and duration.
+                  </div>
+                );
+              }
+              const asset = project.assets.find((a) => a.id === shot.imageId);
+              const idx = timeline!.shots.findIndex((s) => s.id === shot.id);
+              return (
+                <>
+                  {asset && (
+                    <div className="mb-4 aspect-video overflow-hidden rounded-md border border-border">
+                      <img src={asset.src} alt="" className="h-full w-full object-cover" />
+                    </div>
+                  )}
+                  <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Shot {idx + 1} of {timeline!.shots.length}
+                  </p>
+
+                  <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Camera move
+                  </label>
+                  <div className="mb-4 grid grid-cols-2 gap-1.5">
+                    {CAMERA_MOVES.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => updateShot(shot.id, { camera: c })}
+                        className={cn(
+                          "rounded-md border px-2 py-1.5 text-[11px] transition-colors",
+                          shot.camera === c
+                            ? "border-accent bg-accent/10 text-accent"
+                            : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
+                        )}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+
+                  <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Transition in
+                  </label>
+                  <div className="mb-4 grid grid-cols-2 gap-1.5">
+                    {TRANSITIONS.map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => updateShot(shot.id, {
+                          transitionIn: t,
+                          transitionInDuration: t === "cut" ? 0 : 0.45,
+                        })}
+                        className={cn(
+                          "rounded-md border px-2 py-1.5 text-[11px] transition-colors",
+                          shot.transitionIn === t
+                            ? "border-accent bg-accent/10 text-accent"
+                            : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
+                        )}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+
+                  <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Duration · {shot.duration.toFixed(1)}s
+                  </label>
+                  <input
+                    type="range"
+                    min={0.6}
+                    max={12}
+                    step={0.1}
+                    value={shot.duration}
+                    onChange={(e) => updateShot(shot.id, { duration: parseFloat(e.target.value) })}
+                    className="mb-6 w-full accent-accent"
+                  />
+
+                  <button
+                    onClick={() => removeShot(shot.id)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-3 w-3" /> Delete this shot
+                  </button>
+                </>
+              );
+            })()}
+
             {rightTab === "generate" && (
               <>
                 <label className="mb-2 block text-[11px] uppercase tracking-widest text-muted-foreground">
