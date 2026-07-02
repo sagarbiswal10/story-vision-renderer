@@ -389,15 +389,28 @@ function EditorPage() {
 
         {/* CENTER — Preview + Timeline */}
         <section className="flex min-h-0 flex-col">
-          <div className="flex min-h-0 flex-1 items-center justify-center bg-black/60 p-6">
+          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/60 p-6">
             {timeline ? (
-              <div className="max-h-full w-full max-w-4xl">
-                <Preview
-                  timeline={timeline}
-                  assets={project.assets}
-                  audioUrl={project.music?.src}
-                />
-              </div>
+              <>
+                <div className={cn(
+                  fullscreen
+                    ? "fixed inset-0 z-50 flex items-center justify-center bg-black p-6"
+                    : "max-h-full w-full max-w-4xl",
+                )}>
+                  <Preview
+                    timeline={timeline}
+                    assets={project.assets}
+                    audioUrl={project.music?.src}
+                  />
+                  <button
+                    onClick={() => setFullscreen((v) => !v)}
+                    className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-md bg-background/70 text-muted-foreground backdrop-blur hover:text-accent"
+                    title={fullscreen ? "Exit fullscreen" : "Fullscreen preview"}
+                  >
+                    {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  </button>
+                </div>
+              </>
             ) : (
               <div className="w-full max-w-lg">
                 <UploadZone
@@ -410,6 +423,7 @@ function EditorPage() {
               </div>
             )}
           </div>
+
 
           {/* Timeline bar */}
           <div className="h-48 shrink-0 border-t border-border bg-sidebar/60">
