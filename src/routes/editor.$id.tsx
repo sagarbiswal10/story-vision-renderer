@@ -346,33 +346,33 @@ function EditorPage() {
 
 
             {project.story ? (
-              <ol className="space-y-4 text-[15px] leading-relaxed">
+              <ol className="space-y-2 text-[15px] leading-relaxed">
                 {project.story.beats.map((b, i) => {
                   const asset = project.assets.find((a) => a.id === b.imageId);
+                  const shotId = `shot-${i}`;
+                  const active = selectedShotId === shotId;
                   return (
-                    <li key={i} className="flex gap-3">
-                      {asset ? (
-                        <img
-                          src={asset.src}
-                          alt=""
-                          className="mt-1 h-10 w-10 shrink-0 rounded-md object-cover"
-                        />
-                      ) : (
-                        <div className="mt-1 h-10 w-10 shrink-0 rounded-md bg-card" />
-                      )}
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-[10px] uppercase tracking-widest text-accent">
-                            {b.act}
-                          </span>
-                          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                            {b.duration.toFixed(1)}s
-                          </span>
+                    <li key={i}>
+                      <button
+                        onClick={() => { setSelectedShotId(shotId); setRightTab("shot"); }}
+                        className={cn(
+                          "flex w-full gap-3 rounded-md border p-2 text-left transition-colors",
+                          active ? "border-accent bg-accent/10" : "border-transparent hover:border-border hover:bg-card/40",
+                        )}
+                      >
+                        {asset ? (
+                          <img src={asset.src} alt="" className="mt-1 h-10 w-10 shrink-0 rounded-md object-cover" />
+                        ) : (
+                          <div className="mt-1 h-10 w-10 shrink-0 rounded-md bg-card" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[10px] uppercase tracking-widest text-accent">{b.act}</span>
+                            <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{b.duration.toFixed(1)}s</span>
+                          </div>
+                          <p className="text-sm text-foreground/90">{b.caption ?? "Untitled shot."}</p>
                         </div>
-                        <p className="text-sm text-foreground/90">
-                          {b.caption ?? "Untitled shot."}
-                        </p>
-                      </div>
+                      </button>
                     </li>
                   );
                 })}
@@ -384,6 +384,7 @@ function EditorPage() {
             )}
           </div>
         </aside>
+
 
 
         {/* CENTER — Preview + Timeline */}
