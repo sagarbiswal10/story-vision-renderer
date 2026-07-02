@@ -167,26 +167,16 @@ function EditorPage() {
       });
       setMeta(project.id, meta);
 
-  const runAiDirector = async () => {
-    if (project.assets.length === 0) {
-      toast.error("Add some images first.");
-      return;
-    }
-    setAiBusy(true);
-    try {
-      toast("Reading frames with AI vision…");
-      const meta = await tagImagesFn({
-        data: { images: project.assets.map((a) => ({ id: a.id, src: a.src })) },
-      });
-      setMeta(project.id, meta);
-
       // Auto-detect the best template from vision tags
       const detected = detectTemplate(meta, project.templateId);
       let activeTemplate = template;
       if (detected.score >= 1 && detected.id !== project.templateId) {
         const chosen = getTemplate(detected.id);
         activeTemplate = chosen;
-        updateProject(project.id, { templateId: chosen.id });
+        const patch: Partial<typeof project> = { templateId: chosen.id };
+        // Auto-rename generic project names to match detected theme.
+        if (/^Untitled/i.test(project.name)) patch.name = `${chosen.name} Film`;
+        updateProject(project.id, patch);
         toast.success(`Detected ${detected.matched.slice(0, 3).join(", ")} → ${chosen.name} template`);
       }
 
