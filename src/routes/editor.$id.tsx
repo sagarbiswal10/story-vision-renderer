@@ -343,15 +343,7 @@ function EditorPage() {
             </span>
           </div>
           <div className="min-h-0 flex-1 overflow-auto px-5 py-6">
-            <label className="mb-2 block text-[10px] uppercase tracking-widest text-muted-foreground">
-              Brief
-            </label>
-            <textarea
-              value={project.prompt}
-              onChange={(e) => updateProject(project.id, { prompt: e.target.value })}
-              placeholder="Describe your film. e.g. A birthday party — warm, joyful, punchy."
-              className="mb-6 h-20 w-full resize-none rounded-lg border border-border bg-background/40 p-3 text-sm outline-none placeholder:text-muted-foreground focus:border-accent/60"
-            />
+
 
             {project.story ? (
               <ol className="space-y-4 text-[15px] leading-relaxed">
