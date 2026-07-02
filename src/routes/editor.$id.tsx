@@ -2,19 +2,23 @@ import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { TEMPLATES, getTemplate } from "@/lib/engines/templates";
-import { buildStoryArc, buildTimeline, detectTemplate } from "@/lib/engines/director";
+import { buildStoryArc, buildStoryFromMusic, buildTimeline, detectTemplate } from "@/lib/engines/director";
 import { analyzeAudio } from "@/lib/engines/beat";
 import { exportVideo } from "@/lib/engines/export";
 import { createRenderer } from "@/lib/engines/renderer";
+import { cameraToMotion } from "@/lib/engines/motion";
 import { fileToImageAsset } from "@/lib/upload";
 import { Preview } from "@/components/studio/Preview";
 import { UploadZone } from "@/components/studio/UploadZone";
 import { tagImages, directStory, editStoryWithPrompt } from "@/lib/ai/director.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
+import type { CameraMove, Shot, Timeline, TransitionKind } from "@/lib/engines/types";
 import {
   ArrowLeft,
   Download,
+  Maximize2,
+  Minimize2,
   Music,
   Sparkles,
   Wand2,
@@ -24,8 +28,17 @@ import {
   Layers,
   Sliders,
   Trash2,
+  Scissors,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const CAMERA_MOVES: CameraMove[] = [
+  "static", "push-in", "pull-out", "orbit-left", "orbit-right",
+  "tilt-up", "tilt-down", "truck-left", "truck-right", "ken-burns",
+];
+const TRANSITIONS: TransitionKind[] = [
+  "cut", "fade", "dip-to-black", "whip-pan", "cross-dissolve", "wipe-up", "wipe-right",
+];
 
 export const Route = createFileRoute("/editor/$id")({
   head: ({ params }) => ({
