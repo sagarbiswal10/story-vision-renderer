@@ -56,6 +56,32 @@ export function detectTemplate(
 
 
 
+/**
+ * Build a story arc that fits within a music track's duration by picking the
+ * best-scoring assets (heroScore) and letting the template's baseShotDuration
+ * dictate rhythm. Cuts will later be beat-snapped in buildTimeline.
+ */
+export function buildStoryFromMusic(
+  assets: ImageAsset[],
+  meta: Record<string, ImageMeta>,
+  template: Template,
+  prompt: string,
+  musicDuration: number,
+): StoryArc {
+  if (!assets.length) return { title: prompt || "Untitled", mood: template.mood, beats: [] };
+  const target = Math.max(6, Math.min(musicDuration, 120));
+  const base = template.baseShotDuration;
+  const capacity = Math.max(3, Math.floor(target / base));
+
+  const ranked = [...assets].sort((a, b) => {
+    const ha = meta[a.id]?.heroScore ?? 0.5;
+    const hb = meta[b.id]?.heroScore ?? 0.5;
+    return hb - ha;
+  });
+  const picked = ranked.slice(0, Math.min(capacity, assets.length));
+  return buildStoryArc(picked, meta, template, prompt);
+}
+
 export function buildStoryArc(
   assets: ImageAsset[],
   meta: Record<string, ImageMeta>,
