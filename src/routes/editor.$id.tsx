@@ -477,24 +477,26 @@ function EditorPage() {
                 const asset = project.assets.find((a) => a.id === s.imageId);
                 const total = Math.max(timeline.duration, 0.001);
                 return (
-                  <div
+                  <button
                     key={s.id}
+                    type="button"
+                    onClick={() => { setSelectedShotId(s.id); setRightTab("shot"); }}
                     style={{ width: `${(s.duration / total) * 100}%` }}
-                    className="relative m-0.5 overflow-hidden rounded-sm border border-border/60 bg-card"
+                    className={cn(
+                      "relative m-0.5 overflow-hidden rounded-sm border bg-card text-left transition-colors",
+                      selectedShotId === s.id ? "border-accent ring-1 ring-accent" : "border-border/60 hover:border-accent/60",
+                    )}
                   >
                     {asset && (
-                      <img
-                        src={asset.src}
-                        alt=""
-                        className="h-full w-full object-cover opacity-90"
-                      />
+                      <img src={asset.src} alt="" className="h-full w-full object-cover opacity-90" />
                     )}
                     <span className="absolute bottom-0.5 left-1 rounded bg-black/70 px-1 text-[9px] uppercase tracking-widest text-accent">
                       {s.camera}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
+
             </div>
 
             {/* Audio row */}
