@@ -107,12 +107,65 @@ function EditorPage() {
       const beatMap = await analyzeAudio(src);
       setMusic(project.id, { src, name: file.name, beatMap });
       toast.success(`Detected ${beatMap.bpm} BPM · ${beatMap.beats.length} beats`);
-      const updated = { ...project, music: { src, name: file.name, beatMap } };
+      // Auto-rebuild cut: pick best clips to fit music, snap cuts to beats.
+      const story = buildStoryFromMusic(
+        project.assets, project.meta, template, project.prompt, beatMap.duration,
+      );
+      const updated = { ...project, music: { src, name: file.name, beatMap }, story };
+      setStory(project.id, story);
       setTimeline(project.id, buildTimeline(updated));
+      toast.success("Re-cut to the beat.");
     } catch {
       toast.error("Couldn't analyze that track.");
     }
   };
+
+  const updateShot = (shotId: string, patch: Partial<Shot>) => {
+    if (!timeline) return;
+    const shots = timeline.shots.map((s) => {
+      if (s.id !== shotId) return s;
+      const next: Shot = { ...s, ...patch };
+      if (patch.camera && !patch.motion) {
+        next.motion = cameraToMotion(patch.camera, template.motionIntensity, 0);
+      }
+      return next;
+    });
+    // Recompute start times if durations changed
+    let cursor = 0;
+    const restarted = shots.map((s) => {
+      const ns = { ...s, start: cursor };
+      cursor += s.duration;
+      return ns;
+    });
+    const next: Timeline = { ...timeline, shots: restarted, duration: cursor };
+    setTimeline(project.id, next);
+  };
+
+  const removeShot = (shotId: string) => {
+    if (!timeline) return;
+    const shots = timeline.shots.filter((s) => s.id !== shotId);
+    let cursor = 0;
+    const restarted = shots.map((s) => {
+      const ns = { ...s, start: cursor };
+      cursor += s.duration;
+      return ns;
+    });
+    setTimeline(project.id, { ...timeline, shots: restarted, duration: cursor });
+    setSelectedShotId(null);
+  };
+
+  const runAiDirector = async () => {
+    if (project.assets.length === 0) {
+      toast.error("Add some images first.");
+      return;
+    }
+    setAiBusy(true);
+    try {
+      toast("Reading frames with AI vision…");
+      const meta = await tagImagesFn({
+        data: { images: project.assets.map((a) => ({ id: a.id, src: a.src })) },
+      });
+      setMeta(project.id, meta);
 
   const runAiDirector = async () => {
     if (project.assets.length === 0) {
