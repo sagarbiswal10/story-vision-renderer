@@ -70,7 +70,9 @@ function EditorPage() {
   const [editBusy, setEditBusy] = useState(false);
   const [editPrompt, setEditPrompt] = useState("");
   const [exporting, setExporting] = useState(false);
-  const [rightTab, setRightTab] = useState<"generate" | "media" | "styles">("generate");
+  const [rightTab, setRightTab] = useState<"generate" | "media" | "styles" | "shot">("generate");
+  const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const exportCanvasRef = useRef<HTMLCanvasElement>(null);
 
   if (!project) throw notFound();
