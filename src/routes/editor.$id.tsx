@@ -539,7 +539,8 @@ function EditorPage() {
           <div className="flex border-b border-border">
             {(
               [
-                { k: "generate", label: "Generate", icon: Wand2 },
+                { k: "shot", label: "Shot", icon: Scissors },
+                { k: "generate", label: "Direct", icon: Wand2 },
                 { k: "media", label: "Media", icon: Layers },
                 { k: "styles", label: "Style", icon: Sliders },
               ] as const
