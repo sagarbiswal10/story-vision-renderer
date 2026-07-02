@@ -561,6 +561,94 @@ function EditorPage() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto px-5 py-5">
+            {rightTab === "shot" && (() => {
+              const shot = timeline?.shots.find((s) => s.id === selectedShotId);
+              if (!shot) {
+                return (
+                  <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                    Click a clip in the timeline or a beat in the storyboard to edit its camera move, transition, and duration.
+                  </div>
+                );
+              }
+              const asset = project.assets.find((a) => a.id === shot.imageId);
+              const idx = timeline!.shots.findIndex((s) => s.id === shot.id);
+              return (
+                <>
+                  {asset && (
+                    <div className="mb-4 aspect-video overflow-hidden rounded-md border border-border">
+                      <img src={asset.src} alt="" className="h-full w-full object-cover" />
+                    </div>
+                  )}
+                  <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Shot {idx + 1} of {timeline!.shots.length}
+                  </p>
+
+                  <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Camera move
+                  </label>
+                  <div className="mb-4 grid grid-cols-2 gap-1.5">
+                    {CAMERA_MOVES.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => updateShot(shot.id, { camera: c })}
+                        className={cn(
+                          "rounded-md border px-2 py-1.5 text-[11px] transition-colors",
+                          shot.camera === c
+                            ? "border-accent bg-accent/10 text-accent"
+                            : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
+                        )}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+
+                  <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Transition in
+                  </label>
+                  <div className="mb-4 grid grid-cols-2 gap-1.5">
+                    {TRANSITIONS.map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => updateShot(shot.id, {
+                          transitionIn: t,
+                          transitionInDuration: t === "cut" ? 0 : 0.45,
+                        })}
+                        className={cn(
+                          "rounded-md border px-2 py-1.5 text-[11px] transition-colors",
+                          shot.transitionIn === t
+                            ? "border-accent bg-accent/10 text-accent"
+                            : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
+                        )}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+
+                  <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Duration · {shot.duration.toFixed(1)}s
+                  </label>
+                  <input
+                    type="range"
+                    min={0.6}
+                    max={12}
+                    step={0.1}
+                    value={shot.duration}
+                    onChange={(e) => updateShot(shot.id, { duration: parseFloat(e.target.value) })}
+                    className="mb-6 w-full accent-accent"
+                  />
+
+                  <button
+                    onClick={() => removeShot(shot.id)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-3 w-3" /> Delete this shot
+                  </button>
+                </>
+              );
+            })()}
+
             {rightTab === "generate" && (
               <>
                 <label className="mb-2 block text-[11px] uppercase tracking-widest text-muted-foreground">
