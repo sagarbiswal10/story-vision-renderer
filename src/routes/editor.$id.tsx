@@ -598,6 +598,7 @@ function EditorPage() {
               [
                 { k: "shot", label: "Shot", icon: Scissors },
                 { k: "generate", label: "Direct", icon: Wand2 },
+                { k: "audio", label: "Audio", icon: Music },
                 { k: "media", label: "Media", icon: Layers },
                 { k: "styles", label: "Style", icon: Sliders },
               ] as const
