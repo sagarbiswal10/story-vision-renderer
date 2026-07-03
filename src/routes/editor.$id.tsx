@@ -720,10 +720,48 @@ function EditorPage() {
                 />
 
                 <div className="mb-4 grid grid-cols-3 gap-2 text-[11px]">
-                  <Chip icon={<Type className="h-3 w-3" />} label="16:9" />
+                  <Chip icon={<Ratio className="h-3 w-3" />} label={project.aspect} />
                   <Chip label={`${template.baseShotDuration}s / shot`} />
                   <Chip label={template.name} />
                 </div>
+
+                {/* Transition density */}
+                <div className="mb-5 rounded-lg border border-border bg-background/40 p-3">
+                  <div className="mb-1 flex items-center justify-between text-[11px] uppercase tracking-widest text-muted-foreground">
+                    <span>Cut density</span>
+                    <span className="font-mono text-accent">
+                      {project.transitionDensity < 0.33 ? "Long takes" : project.transitionDensity > 0.66 ? "Fast cuts" : "Balanced"}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0} max={1} step={0.05}
+                    value={project.transitionDensity}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      updateProject(project.id, { transitionDensity: v }, { skipHistory: true });
+                    }}
+                    onMouseUp={() => {
+                      if (project.assets.length) setTimeline(project.id, buildTimeline(project));
+                    }}
+                    onTouchEnd={() => {
+                      if (project.assets.length) setTimeline(project.id, buildTimeline(project));
+                    }}
+                    className="w-full accent-accent"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Fewer cuts feel cinematic. More cuts feel like a music video.
+                  </p>
+                </div>
+
+                <label className="mb-2 flex cursor-pointer items-center gap-2 text-[11px] text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={project.showTitle}
+                    onChange={(e) => updateProject(project.id, { showTitle: e.target.checked })}
+                  />
+                  Show title card at start
+                </label>
 
                 <button
                   onClick={runAiDirector}
