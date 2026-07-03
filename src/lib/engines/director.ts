@@ -167,21 +167,51 @@ export function buildTimeline(project: Project): Timeline {
     project.story ??
     buildStoryArc(project.assets, project.meta, template, project.prompt);
 
-  const beats = project.music?.beatMap?.beats ?? [];
+  const beatMap = project.music?.beatMap;
+  const beats = beatMap?.beats ?? [];
   const camPool: CameraMove[] = template.cameraVocabulary;
-  const trPool: TransitionKind[] = template.transitions;
+  // Skip "cut" so every clip has a real, visible transition in and out.
+  const trPool: TransitionKind[] = template.transitions.filter((t) => t !== "cut");
+  const trFallback: TransitionKind[] = trPool.length ? trPool : ["cross-dissolve"];
+
+  // Density (0..1) scales both cut frequency and transition length.
+  const density = clamp01(project.transitionDensity ?? 0.5);
+  const beatsPerCut = beats.length
+    ? Math.max(1, Math.round(8 - density * 6)) // dense=2 beats, sparse=8
+    : 0;
+  const secondsPerBeat = beatMap ? 60 / Math.max(60, beatMap.bpm) : 0;
+  const minShot = beatMap ? secondsPerBeat * Math.max(1, beatsPerCut - 1) : 0.8;
+
+  const dims = ASPECT_DIMENSIONS[project.aspect ?? "16:9"];
+
+  // Pre-compute beat-locked cut anchors when music is present.
+  const cutAnchors: number[] = [];
+  if (beats.length && beatsPerCut > 0) {
+    for (let i = 0; i < beats.length; i += beatsPerCut) cutAnchors.push(beats[i]);
+    if (beatMap && cutAnchors[cutAnchors.length - 1] < beatMap.duration - 0.5) {
+      cutAnchors.push(beatMap.duration);
+    }
+  }
 
   let cursor = 0;
   const shots: Shot[] = story.beats.map((sb, idx) => {
     const camera = pickFromPool(camPool, idx);
-    const transition = pickFromPool(trPool, idx);
+    const transition = pickFromPool(trFallback, idx);
     const motion = cameraToMotion(camera, template.motionIntensity, idx);
-    const transitionInDuration = transition === "cut" ? 0 : 0.45;
 
-    const rawDuration = sb.duration;
-    const rawEnd = cursor + rawDuration;
-    const snappedEnd = snapToBeat(rawEnd, beats, template.beatSync);
-    const duration = Math.max(0.8, snappedEnd - cursor);
+    // Transition length: longer on slow templates, shorter on dense edits.
+    const baseXfade = 0.35 + (1 - density) * 0.55; // 0.35..0.9s
+    const transitionInDuration = idx === 0 ? Math.min(0.8, baseXfade) : baseXfade;
+
+    let end: number;
+    if (cutAnchors.length) {
+      // Snap this shot's end to the next available cut anchor.
+      const target = cutAnchors.find((t) => t > cursor + minShot) ?? cursor + sb.duration;
+      end = target;
+    } else {
+      end = snapToBeat(cursor + sb.duration, beats, template.beatSync);
+    }
+    const duration = Math.max(minShot || 0.8, end - cursor);
 
     const shot: Shot = {
       id: `shot-${idx}`,
@@ -192,19 +222,8 @@ export function buildTimeline(project: Project): Timeline {
       motion,
       transitionIn: idx === 0 ? "fade" : transition,
       transitionInDuration,
-      text:
-        idx === 0 && story.title
-          ? {
-              text: story.title,
-              fontFamily: template.typography.titleFont,
-              size: 88,
-              weight: template.typography.titleWeight,
-              align: "left",
-              position: { x: 0.08, y: 0.78 },
-              in: 0.4,
-              out: Math.min(duration - 0.2, 3.4),
-            }
-          : undefined,
+      // Optional title overlay — only if the user explicitly opts in.
+      text: undefined,
     };
     cursor += duration;
     return shot;
@@ -212,9 +231,9 @@ export function buildTimeline(project: Project): Timeline {
 
   return {
     id: project.id,
-    width: ASPECT.width,
-    height: ASPECT.height,
-    fps: ASPECT.fps,
+    width: dims.width,
+    height: dims.height,
+    fps: FPS,
     duration: cursor,
     shots,
     templateId: template.id,
@@ -224,6 +243,10 @@ export function buildTimeline(project: Project): Timeline {
     colorGrade: template.colorGrade,
     effects: template.effects,
   };
+}
+
+function clamp01(n: number) {
+  return Math.max(0, Math.min(1, n));
 }
 
 function pickFromPool<T>(pool: T[], idx: number): T {
