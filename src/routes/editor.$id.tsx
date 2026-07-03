@@ -24,7 +24,6 @@ import {
   Wand2,
   X,
   ImagePlus,
-  ImagePlus,
   Layers,
   Sliders,
   Trash2,
