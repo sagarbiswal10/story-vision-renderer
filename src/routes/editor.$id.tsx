@@ -24,13 +24,25 @@ import {
   Wand2,
   X,
   ImagePlus,
-  Type,
   Layers,
   Sliders,
   Trash2,
   Scissors,
+  Undo2,
+  Redo2,
+  Volume2,
+  VolumeX,
+  Ratio,
 } from "lucide-react";
+import type { AspectRatio } from "@/lib/engines/types";
 import { cn } from "@/lib/utils";
+
+const ASPECTS: { id: AspectRatio; label: string; hint: string }[] = [
+  { id: "16:9", label: "16:9", hint: "Cinema" },
+  { id: "9:16", label: "9:16", hint: "Reels" },
+  { id: "1:1", label: "1:1", hint: "Square" },
+  { id: "4:5", label: "4:5", hint: "Feed" },
+];
 
 const CAMERA_MOVES: CameraMove[] = [
   "static", "push-in", "pull-out", "orbit-left", "orbit-right",
@@ -59,7 +71,7 @@ function EditorPage() {
   const project = useStudio((s) => s.projects.find((p) => p.id === id));
   const {
     setAssets, setMeta, setMusic, setStory, setTimeline,
-    setRender, updateProject, deleteProject,
+    setRender, updateProject, deleteProject, setAudio, undo, redo, canUndo, canRedo,
   } = useStudio();
 
   const tagImagesFn = useServerFn(tagImages);
@@ -70,7 +82,7 @@ function EditorPage() {
   const [editBusy, setEditBusy] = useState(false);
   const [editPrompt, setEditPrompt] = useState("");
   const [exporting, setExporting] = useState(false);
-  const [rightTab, setRightTab] = useState<"generate" | "media" | "styles" | "shot">("generate");
+  const [rightTab, setRightTab] = useState<"generate" | "media" | "styles" | "shot" | "audio">("generate");
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const exportCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -83,6 +95,21 @@ function EditorPage() {
     if (project.assets.length === 0) return null;
     return project.timeline ?? buildTimeline(project);
   }, [project]);
+
+  // Keyboard shortcuts — undo / redo
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key.toLowerCase() === "z" && !e.shiftKey) { e.preventDefault(); undo(project.id); }
+      else if ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y") {
+        e.preventDefault(); redo(project.id);
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [project.id, undo, redo]);
+
 
   const onAddImages = async (files: File[]) => {
     const next = await Promise.all(files.map(fileToImageAsset));
@@ -308,6 +335,49 @@ function EditorPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Aspect ratio switcher */}
+          <div className="hidden items-center gap-0.5 rounded-full border border-border bg-background/40 p-0.5 md:flex">
+            {ASPECTS.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => {
+                  updateProject(project.id, { aspect: a.id });
+                  const updated = { ...project, aspect: a.id };
+                  if (updated.assets.length) setTimeline(project.id, buildTimeline(updated), { skipHistory: true });
+                }}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-mono uppercase tracking-widest transition-colors",
+                  project.aspect === a.id
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                title={a.hint}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Undo / Redo */}
+          <div className="flex items-center gap-0.5 rounded-md border border-border">
+            <button
+              onClick={() => undo(project.id)}
+              disabled={!canUndo(project.id)}
+              className="grid h-8 w-8 place-items-center text-muted-foreground hover:text-foreground disabled:opacity-30"
+              title="Undo (⌘Z)"
+            >
+              <Undo2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => redo(project.id)}
+              disabled={!canRedo(project.id)}
+              className="grid h-8 w-8 place-items-center text-muted-foreground hover:text-foreground disabled:opacity-30"
+              title="Redo (⌘⇧Z)"
+            >
+              <Redo2 className="h-4 w-4" />
+            </button>
+          </div>
+
           <button
             onClick={runAiDirector}
             disabled={aiBusy || project.assets.length === 0}
@@ -401,6 +471,7 @@ function EditorPage() {
                     timeline={timeline}
                     assets={project.assets}
                     audioUrl={project.music?.src}
+                    audioSettings={project.audio}
                   />
                   <button
                     onClick={() => setFullscreen((v) => !v)}
@@ -541,6 +612,7 @@ function EditorPage() {
               [
                 { k: "shot", label: "Shot", icon: Scissors },
                 { k: "generate", label: "Direct", icon: Wand2 },
+                { k: "audio", label: "Audio", icon: Music },
                 { k: "media", label: "Media", icon: Layers },
                 { k: "styles", label: "Style", icon: Sliders },
               ] as const
@@ -662,10 +734,48 @@ function EditorPage() {
                 />
 
                 <div className="mb-4 grid grid-cols-3 gap-2 text-[11px]">
-                  <Chip icon={<Type className="h-3 w-3" />} label="16:9" />
+                  <Chip icon={<Ratio className="h-3 w-3" />} label={project.aspect} />
                   <Chip label={`${template.baseShotDuration}s / shot`} />
                   <Chip label={template.name} />
                 </div>
+
+                {/* Transition density */}
+                <div className="mb-5 rounded-lg border border-border bg-background/40 p-3">
+                  <div className="mb-1 flex items-center justify-between text-[11px] uppercase tracking-widest text-muted-foreground">
+                    <span>Cut density</span>
+                    <span className="font-mono text-accent">
+                      {project.transitionDensity < 0.33 ? "Long takes" : project.transitionDensity > 0.66 ? "Fast cuts" : "Balanced"}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0} max={1} step={0.05}
+                    value={project.transitionDensity}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      updateProject(project.id, { transitionDensity: v }, { skipHistory: true });
+                    }}
+                    onMouseUp={() => {
+                      if (project.assets.length) setTimeline(project.id, buildTimeline(project));
+                    }}
+                    onTouchEnd={() => {
+                      if (project.assets.length) setTimeline(project.id, buildTimeline(project));
+                    }}
+                    className="w-full accent-accent"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Fewer cuts feel cinematic. More cuts feel like a music video.
+                  </p>
+                </div>
+
+                <label className="mb-2 flex cursor-pointer items-center gap-2 text-[11px] text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={project.showTitle}
+                    onChange={(e) => updateProject(project.id, { showTitle: e.target.checked })}
+                  />
+                  Show title card at start
+                </label>
 
                 <button
                   onClick={runAiDirector}
@@ -721,6 +831,124 @@ function EditorPage() {
               </>
             )}
 
+            {rightTab === "audio" && (
+              <>
+                {!project.music ? (
+                  <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background/40 p-8 text-center text-xs text-muted-foreground hover:border-accent/60 hover:text-accent">
+                    <Music className="h-6 w-6" />
+                    Drop a track to unlock beat-locked editing
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        if (files.length) onMusic(files);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <>
+                    <div className="mb-4 rounded-lg border border-border bg-background/40 p-3">
+                      <div className="flex items-center gap-2">
+                        <Music className="h-4 w-4 text-accent" />
+                        <p className="min-w-0 flex-1 truncate text-sm">{project.music.name}</p>
+                      </div>
+                      {project.music.beatMap && (
+                        <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                          {project.music.beatMap.bpm} BPM · {project.music.beatMap.beats.length} beats · {project.music.beatMap.duration.toFixed(1)}s
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="mb-4 flex items-center gap-3">
+                      <button
+                        onClick={() => setAudio(project.id, { muted: !project.audio.muted })}
+                        className="grid h-9 w-9 place-items-center rounded-md border border-border text-muted-foreground hover:text-accent"
+                        title={project.audio.muted ? "Unmute" : "Mute"}
+                      >
+                        {project.audio.muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                      </button>
+                      <div className="flex-1">
+                        <div className="mb-1 flex justify-between text-[10px] uppercase tracking-widest text-muted-foreground">
+                          <span>Volume</span>
+                          <span className="font-mono">{Math.round(project.audio.volume * 100)}%</span>
+                        </div>
+                        <input
+                          type="range" min={0} max={1} step={0.01}
+                          value={project.audio.volume}
+                          onChange={(e) => setAudio(project.id, { volume: parseFloat(e.target.value) })}
+                          className="w-full accent-accent"
+                        />
+                      </div>
+                    </div>
+
+                    <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                      Fade in · {project.audio.fadeIn.toFixed(1)}s
+                    </label>
+                    <input
+                      type="range" min={0} max={5} step={0.1}
+                      value={project.audio.fadeIn}
+                      onChange={(e) => setAudio(project.id, { fadeIn: parseFloat(e.target.value) })}
+                      className="mb-4 w-full accent-accent"
+                    />
+
+                    <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                      Fade out · {project.audio.fadeOut.toFixed(1)}s
+                    </label>
+                    <input
+                      type="range" min={0} max={6} step={0.1}
+                      value={project.audio.fadeOut}
+                      onChange={(e) => setAudio(project.id, { fadeOut: parseFloat(e.target.value) })}
+                      className="mb-4 w-full accent-accent"
+                    />
+
+                    <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                      Trim start · {project.audio.trimStart.toFixed(1)}s
+                    </label>
+                    <input
+                      type="range" min={0}
+                      max={Math.max(0, (project.music.beatMap?.duration ?? 60) - 5)}
+                      step={0.1}
+                      value={project.audio.trimStart}
+                      onChange={(e) => setAudio(project.id, { trimStart: parseFloat(e.target.value) })}
+                      className="mb-4 w-full accent-accent"
+                    />
+
+                    <button
+                      onClick={async () => {
+                        if (!project.music?.beatMap) return;
+                        const story = buildStoryFromMusic(
+                          project.assets, project.meta, template, project.prompt,
+                          project.music.beatMap.duration,
+                        );
+                        setStory(project.id, story);
+                        setTimeline(project.id, buildTimeline({ ...project, story }));
+                        toast.success("Re-cut to the beat.");
+                      }}
+                      className="mb-2 flex w-full items-center justify-center gap-2 rounded-md border border-accent/60 px-3 py-2 text-xs text-accent hover:bg-accent/10"
+                    >
+                      <Sparkles className="h-3 w-3" /> Re-cut to this song
+                    </button>
+
+                    <label className="mt-4 flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border py-2 text-[11px] text-muted-foreground hover:border-accent/60 hover:text-accent">
+                      Replace track
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files ?? []);
+                          if (files.length) onMusic(files);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </>
+                )}
+              </>
+            )}
 
             {rightTab === "media" && (
               <>
