@@ -817,6 +817,124 @@ function EditorPage() {
               </>
             )}
 
+            {rightTab === "audio" && (
+              <>
+                {!project.music ? (
+                  <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background/40 p-8 text-center text-xs text-muted-foreground hover:border-accent/60 hover:text-accent">
+                    <Music className="h-6 w-6" />
+                    Drop a track to unlock beat-locked editing
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        if (files.length) onMusic(files);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <>
+                    <div className="mb-4 rounded-lg border border-border bg-background/40 p-3">
+                      <div className="flex items-center gap-2">
+                        <Music className="h-4 w-4 text-accent" />
+                        <p className="min-w-0 flex-1 truncate text-sm">{project.music.name}</p>
+                      </div>
+                      {project.music.beatMap && (
+                        <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                          {project.music.beatMap.bpm} BPM · {project.music.beatMap.beats.length} beats · {project.music.beatMap.duration.toFixed(1)}s
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="mb-4 flex items-center gap-3">
+                      <button
+                        onClick={() => setAudio(project.id, { muted: !project.audio.muted })}
+                        className="grid h-9 w-9 place-items-center rounded-md border border-border text-muted-foreground hover:text-accent"
+                        title={project.audio.muted ? "Unmute" : "Mute"}
+                      >
+                        {project.audio.muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                      </button>
+                      <div className="flex-1">
+                        <div className="mb-1 flex justify-between text-[10px] uppercase tracking-widest text-muted-foreground">
+                          <span>Volume</span>
+                          <span className="font-mono">{Math.round(project.audio.volume * 100)}%</span>
+                        </div>
+                        <input
+                          type="range" min={0} max={1} step={0.01}
+                          value={project.audio.volume}
+                          onChange={(e) => setAudio(project.id, { volume: parseFloat(e.target.value) })}
+                          className="w-full accent-accent"
+                        />
+                      </div>
+                    </div>
+
+                    <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                      Fade in · {project.audio.fadeIn.toFixed(1)}s
+                    </label>
+                    <input
+                      type="range" min={0} max={5} step={0.1}
+                      value={project.audio.fadeIn}
+                      onChange={(e) => setAudio(project.id, { fadeIn: parseFloat(e.target.value) })}
+                      className="mb-4 w-full accent-accent"
+                    />
+
+                    <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                      Fade out · {project.audio.fadeOut.toFixed(1)}s
+                    </label>
+                    <input
+                      type="range" min={0} max={6} step={0.1}
+                      value={project.audio.fadeOut}
+                      onChange={(e) => setAudio(project.id, { fadeOut: parseFloat(e.target.value) })}
+                      className="mb-4 w-full accent-accent"
+                    />
+
+                    <label className="mb-1 block text-[11px] uppercase tracking-widest text-muted-foreground">
+                      Trim start · {project.audio.trimStart.toFixed(1)}s
+                    </label>
+                    <input
+                      type="range" min={0}
+                      max={Math.max(0, (project.music.beatMap?.duration ?? 60) - 5)}
+                      step={0.1}
+                      value={project.audio.trimStart}
+                      onChange={(e) => setAudio(project.id, { trimStart: parseFloat(e.target.value) })}
+                      className="mb-4 w-full accent-accent"
+                    />
+
+                    <button
+                      onClick={async () => {
+                        if (!project.music?.beatMap) return;
+                        const story = buildStoryFromMusic(
+                          project.assets, project.meta, template, project.prompt,
+                          project.music.beatMap.duration,
+                        );
+                        setStory(project.id, story);
+                        setTimeline(project.id, buildTimeline({ ...project, story }));
+                        toast.success("Re-cut to the beat.");
+                      }}
+                      className="mb-2 flex w-full items-center justify-center gap-2 rounded-md border border-accent/60 px-3 py-2 text-xs text-accent hover:bg-accent/10"
+                    >
+                      <Sparkles className="h-3 w-3" /> Re-cut to this song
+                    </button>
+
+                    <label className="mt-4 flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border py-2 text-[11px] text-muted-foreground hover:border-accent/60 hover:text-accent">
+                      Replace track
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files ?? []);
+                          if (files.length) onMusic(files);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </>
+                )}
+              </>
+            )}
 
             {rightTab === "media" && (
               <>
