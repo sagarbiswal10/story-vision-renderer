@@ -5,22 +5,28 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { createRenderer, type Renderer } from "@/lib/engines/renderer";
-import type { ImageAsset, Timeline } from "@/lib/engines/types";
-import { Pause, Play, RotateCcw } from "lucide-react";
+import type { AudioSettings, ImageAsset, Timeline } from "@/lib/engines/types";
+import { Pause, Play, RotateCcw, Volume2, VolumeX } from "lucide-react";
 
 interface Props {
   timeline: Timeline;
   assets: ImageAsset[];
   audioUrl?: string;
+  audioSettings?: AudioSettings;
 }
 
-export function Preview({ timeline, assets, audioUrl }: Props) {
+const DEFAULT_AUDIO: AudioSettings = {
+  volume: 0.9, muted: false, fadeIn: 0, fadeOut: 0, trimStart: 0,
+};
+
+export function Preview({ timeline, assets, audioUrl, audioSettings }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
   const rafRef = useRef<number>(0);
   const startRef = useRef<number>(0);
   const offsetRef = useRef<number>(0);
+  const settings = audioSettings ?? DEFAULT_AUDIO;
 
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
@@ -40,6 +46,13 @@ export function Preview({ timeline, assets, audioUrl }: Props) {
     };
   }, [timeline, assets]);
 
+  // Apply audio settings live (volume/mute)
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.muted = settings.muted;
+    audioRef.current.volume = settings.volume;
+  }, [settings.muted, settings.volume]);
+
   useEffect(() => {
     if (!playing) {
       cancelAnimationFrame(rafRef.current);
@@ -48,7 +61,7 @@ export function Preview({ timeline, assets, audioUrl }: Props) {
     }
     startRef.current = performance.now() - offsetRef.current * 1000;
     if (audioRef.current) {
-      audioRef.current.currentTime = offsetRef.current;
+      audioRef.current.currentTime = offsetRef.current + settings.trimStart;
       audioRef.current.play().catch(() => undefined);
     }
     const loop = () => {
@@ -62,26 +75,39 @@ export function Preview({ timeline, assets, audioUrl }: Props) {
       offsetRef.current = t;
       setTime(t);
       rendererRef.current?.renderAtTime(t);
+      // Live audio envelope (fade in / fade out)
+      if (audioRef.current && !settings.muted) {
+        const fin = settings.fadeIn > 0 ? Math.min(1, t / settings.fadeIn) : 1;
+        const remaining = timeline.duration - t;
+        const fout = settings.fadeOut > 0
+          ? Math.min(1, remaining / settings.fadeOut) : 1;
+        audioRef.current.volume = settings.volume * Math.max(0, Math.min(fin, fout));
+      }
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [playing, timeline.duration]);
+  }, [playing, timeline.duration, settings.fadeIn, settings.fadeOut, settings.volume, settings.muted, settings.trimStart]);
 
   const scrub = (v: number) => {
     offsetRef.current = v;
     setTime(v);
     rendererRef.current?.renderAtTime(v);
-    if (audioRef.current) audioRef.current.currentTime = v;
+    if (audioRef.current) audioRef.current.currentTime = v + settings.trimStart;
   };
+
+  const aspectStyle = { aspectRatio: `${timeline.width} / ${timeline.height}` };
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-hidden rounded-xl border border-border bg-black shadow-elevated">
+      <div
+        className="mx-auto flex max-h-full w-full items-center justify-center overflow-hidden rounded-xl border border-border bg-black shadow-elevated"
+        style={{ maxWidth: timeline.height > timeline.width ? "min(420px, 100%)" : "100%" }}
+      >
         <canvas
           ref={canvasRef}
-          className="block aspect-video w-full"
-          style={{ background: "#000" }}
+          className="block h-auto w-full"
+          style={{ ...aspectStyle, background: "#000" }}
         />
       </div>
       <div className="flex items-center gap-3 rounded-lg border border-border bg-card/60 px-3 py-2">
@@ -106,6 +132,11 @@ export function Preview({ timeline, assets, audioUrl }: Props) {
           onChange={(e) => scrub(parseFloat(e.target.value))}
           className="flex-1 accent-[color:var(--accent)]"
         />
+        {audioUrl && (
+          <span className="text-muted-foreground">
+            {settings.muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          </span>
+        )}
         <span className="font-mono text-xs tabular-nums text-muted-foreground">
           {fmt(time)} / {fmt(timeline.duration)}
         </span>
@@ -122,3 +153,4 @@ function fmt(t: number) {
   const s = (t % 60).toFixed(1).padStart(4, "0");
   return `${m}:${s}`;
 }
+
