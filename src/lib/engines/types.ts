@@ -189,6 +189,16 @@ export interface Timeline {
 
 export type RenderStatus = "idle" | "queued" | "rendering" | "done" | "error";
 
+export type AspectRatio = "16:9" | "9:16" | "1:1" | "4:5";
+
+export interface AudioSettings {
+  volume: number; // 0..1
+  muted: boolean;
+  fadeIn: number; // seconds
+  fadeOut: number; // seconds
+  trimStart: number; // seconds — offset into the source track
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -196,6 +206,11 @@ export interface Project {
   updatedAt: number;
   templateId: string;
   prompt: string;
+  aspect: AspectRatio;
+  /** 0..1 — cuts-per-bar. 0 = long takes, 1 = rapid cuts. */
+  transitionDensity: number;
+  audio: AudioSettings;
+  showTitle: boolean;
   assets: ImageAsset[];
   meta: Record<string, ImageMeta>;
   music?: { src: string; name: string; beatMap?: BeatMap };
@@ -208,3 +223,10 @@ export interface Project {
     error?: string;
   };
 }
+
+export const ASPECT_DIMENSIONS: Record<AspectRatio, { width: number; height: number }> = {
+  "16:9": { width: 1920, height: 1080 },
+  "9:16": { width: 1080, height: 1920 },
+  "1:1": { width: 1080, height: 1080 },
+  "4:5": { width: 1080, height: 1350 },
+};
