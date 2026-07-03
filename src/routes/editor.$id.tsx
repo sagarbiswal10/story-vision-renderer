@@ -97,6 +97,21 @@ function EditorPage() {
     return project.timeline ?? buildTimeline(project);
   }, [project]);
 
+  // Keyboard shortcuts — undo / redo
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key.toLowerCase() === "z" && !e.shiftKey) { e.preventDefault(); undo(project.id); }
+      else if ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y") {
+        e.preventDefault(); redo(project.id);
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [project.id, undo, redo]);
+
+
   const onAddImages = async (files: File[]) => {
     const next = await Promise.all(files.map(fileToImageAsset));
     setAssets(project.id, [...project.assets, ...next]);
