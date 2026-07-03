@@ -21,10 +21,11 @@ import type {
   Timeline,
   TransitionKind,
 } from "./types";
+import { ASPECT_DIMENSIONS } from "./types";
 import { cameraToMotion } from "./motion";
 import { getTemplate, TEMPLATES } from "./templates";
 
-const ASPECT = { width: 1920, height: 1080, fps: 30 };
+const FPS = 30;
 
 /**
  * Auto-detect the best template for a batch of tagged images.
