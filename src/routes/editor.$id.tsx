@@ -321,6 +321,49 @@ function EditorPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Aspect ratio switcher */}
+          <div className="hidden items-center gap-0.5 rounded-full border border-border bg-background/40 p-0.5 md:flex">
+            {ASPECTS.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => {
+                  updateProject(project.id, { aspect: a.id });
+                  const updated = { ...project, aspect: a.id };
+                  if (updated.assets.length) setTimeline(project.id, buildTimeline(updated), { skipHistory: true });
+                }}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-mono uppercase tracking-widest transition-colors",
+                  project.aspect === a.id
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                title={a.hint}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Undo / Redo */}
+          <div className="flex items-center gap-0.5 rounded-md border border-border">
+            <button
+              onClick={() => undo(project.id)}
+              disabled={!canUndo(project.id)}
+              className="grid h-8 w-8 place-items-center text-muted-foreground hover:text-foreground disabled:opacity-30"
+              title="Undo (⌘Z)"
+            >
+              <Undo2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => redo(project.id)}
+              disabled={!canRedo(project.id)}
+              className="grid h-8 w-8 place-items-center text-muted-foreground hover:text-foreground disabled:opacity-30"
+              title="Redo (⌘⇧Z)"
+            >
+              <Redo2 className="h-4 w-4" />
+            </button>
+          </div>
+
           <button
             onClick={runAiDirector}
             disabled={aiBusy || project.assets.length === 0}
