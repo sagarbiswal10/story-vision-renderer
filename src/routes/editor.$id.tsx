@@ -457,6 +457,7 @@ function EditorPage() {
                     timeline={timeline}
                     assets={project.assets}
                     audioUrl={project.music?.src}
+                    audioSettings={project.audio}
                   />
                   <button
                     onClick={() => setFullscreen((v) => !v)}
