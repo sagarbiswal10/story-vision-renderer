@@ -72,7 +72,7 @@ function EditorPage() {
   const project = useStudio((s) => s.projects.find((p) => p.id === id));
   const {
     setAssets, setMeta, setMusic, setStory, setTimeline,
-    setRender, updateProject, deleteProject,
+    setRender, updateProject, deleteProject, setAudio, undo, redo, canUndo, canRedo,
   } = useStudio();
 
   const tagImagesFn = useServerFn(tagImages);
