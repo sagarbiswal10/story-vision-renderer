@@ -254,11 +254,11 @@ export const useStudio = create<StudioState>()(
         const s = state as { projects?: Project[] };
         if (s?.projects) {
           s.projects = s.projects.map((p) => ({
+            ...p,
             aspect: p.aspect ?? "16:9",
             transitionDensity: p.transitionDensity ?? 0.5,
             audio: p.audio ?? { ...defaultAudio },
             showTitle: p.showTitle ?? false,
-            ...p,
           }));
         }
         return s as never;
